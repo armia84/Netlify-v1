@@ -23,7 +23,16 @@ export default async function handler(request) {
 
   try {
     const url = new URL(request.url);
-    const path = url.pathname.replace(/^\/api/, "") || "/";
+
+    let path;
+    if (url.pathname === "/api") {
+      path = "/";
+    } else if (url.pathname.startsWith("/api/")) {
+      path = url.pathname.slice(4);
+    } else {
+      path = url.pathname;
+    }
+
     const targetUrl = new URL(path + url.search, TARGET_BASE).toString();
 
     const headers = new Headers();
@@ -62,15 +71,18 @@ export default async function handler(request) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
 
-    const upstream = await fetch(targetUrl, {
-      method,
-      headers,
-      body: hasBody ? request.body : undefined,
-      redirect: "manual",
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeout);
+    let upstream;
+    try {
+      upstream = await fetch(targetUrl, {
+        method,
+        headers,
+        body: hasBody ? request.body : undefined,
+        redirect: "manual",
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
 
     const responseHeaders = new Headers();
 
