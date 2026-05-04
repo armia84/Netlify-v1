@@ -62,6 +62,8 @@ export default async function handler(request) {
       headers.set("x-real-ip", clientIp);
     }
 
+    const targetHost = new URL(TARGET_BASE).host;
+    headers.set("host", targetHost);
     headers.set("x-forwarded-host", url.host);
     headers.set("x-forwarded-proto", url.protocol.replace(":", ""));
 
