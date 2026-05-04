@@ -5,4 +5,4 @@
 
 [[edge_functions]]
   function = "proxy"
-  path = "/*"
+  path = "/api/*"
