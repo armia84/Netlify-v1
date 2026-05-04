@@ -55,18 +55,22 @@ export default async function handler(request) {
     const method = request.method;
     const hasBody = method !== "GET" && method !== "HEAD";
 
-    const upstream = await fetch(targetUrl, {
+    const fetchOptions = {
       method,
       headers,
       redirect: "manual",
-      ...(hasBody ? { body: request.body } : null),
-    });
+    };
+
+    if (hasBody) {
+      fetchOptions.body = request.body;
+    }
+
+    const upstream = await fetch(targetUrl, fetchOptions);
 
     const responseHeaders = new Headers();
     for (const [key, value] of upstream.headers) {
-      if (key.toLowerCase() !== "transfer-encoding") {
-        responseHeaders.set(key, value);
-      }
+      if (key.toLowerCase() === "transfer-encoding") continue;
+      responseHeaders.set(key, value);
     }
 
     return new Response(upstream.body, {
