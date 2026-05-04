@@ -23,7 +23,8 @@ export default async function handler(request) {
 
   try {
     const url = new URL(request.url);
-    const targetUrl = new URL(url.pathname + url.search, TARGET_BASE).toString();
+    const path = url.pathname.replace(/^\/api/, "") || "/";
+    const targetUrl = new URL(path + url.search, TARGET_BASE).toString();
 
     const headers = new Headers();
     let clientIp = null;
