@@ -23,17 +23,7 @@ export default async function handler(request) {
 
   try {
     const url = new URL(request.url);
-
-    let path;
-    if (url.pathname === "/api") {
-      path = "/";
-    } else if (url.pathname.startsWith("/api/")) {
-      path = url.pathname.slice(4);
-    } else {
-      path = url.pathname;
-    }
-
-    const targetUrl = new URL(path + url.search, TARGET_BASE).toString();
+    const targetUrl = `${TARGET_BASE}${url.pathname}${url.search}`;
 
     const headers = new Headers();
     let clientIp = null;
@@ -41,8 +31,9 @@ export default async function handler(request) {
     for (const [key, value] of request.headers) {
       const k = key.toLowerCase();
 
-      if (STRIP_HEADERS.has(k)) continue;
-      if (k.startsWith("x-nf-") || k.startsWith("x-netlify-")) continue;
+      if (STRIP_HEADERS.has(k) || k.startsWith("x-nf-") || k.startsWith("x-netlify-")) {
+        continue;
+      }
 
       if (k === "x-real-ip") {
         clientIp = value;
@@ -50,73 +41,39 @@ export default async function handler(request) {
       }
 
       if (k === "x-forwarded-for") {
-        if (!clientIp) clientIp = value.split(",")[0].trim();
+        if (clientIp === null) clientIp = value;
         continue;
       }
 
       headers.set(k, value);
     }
 
-    if (clientIp) {
+    if (clientIp !== null) {
       headers.set("x-forwarded-for", clientIp);
-      headers.set("x-real-ip", clientIp);
     }
-
-    const targetHost = new URL(TARGET_BASE).host;
-    headers.set("host", targetHost);
-    headers.set("x-forwarded-host", url.host);
-    headers.set("x-forwarded-proto", url.protocol.replace(":", ""));
 
     const method = request.method;
     const hasBody = method !== "GET" && method !== "HEAD";
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
-
-    let upstream;
-    try {
-      upstream = await fetch(targetUrl, {
-        method,
-        headers,
-        body: hasBody ? request.body : undefined,
-        redirect: "manual",
-        signal: controller.signal,
-      });
-    } finally {
-      clearTimeout(timeout);
-    }
+    const upstream = await fetch(targetUrl, {
+      method,
+      headers,
+      redirect: "manual",
+      ...(hasBody ? { body: request.body } : null),
+    });
 
     const responseHeaders = new Headers();
-
     for (const [key, value] of upstream.headers) {
-      const k = key.toLowerCase();
-
-      if (
-        k === "transfer-encoding" ||
-        k === "connection" ||
-        k === "keep-alive" ||
-        k === "proxy-authenticate" ||
-        k === "proxy-authorization" ||
-        k === "te" ||
-        k === "trailer" ||
-        k === "upgrade"
-      ) continue;
-
-      responseHeaders.set(key, value);
+      if (key.toLowerCase() !== "transfer-encoding") {
+        responseHeaders.set(key, value);
+      }
     }
 
     return new Response(upstream.body, {
       status: upstream.status,
-      statusText: upstream.statusText,
       headers: responseHeaders,
     });
-
-  } catch (error) {
-    const msg =
-      error.name === "AbortError"
-        ? "Upstream timeout"
-        : "Bad Gateway";
-
-    return new Response(msg, { status: 502 });
+  } catch {
+    return new Response("Bad Gateway: Relay Failed", { status: 502 });
   }
 }
